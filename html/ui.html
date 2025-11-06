@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>az_fire NUI</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; font-family:Arial, sans-serif; }
+    body { background:transparent; overflow:hidden; }
+
+    .hidden { display:none !important; }
+
+    /* Incident HUD (default bottom-left) */
+    #incident-overlay {
+      position:fixed;
+      left:15px;
+      bottom:140px;
+      width:230px;
+      padding:8px 10px;
+      background:rgba(0,0,0,0.75);
+      color:#fff;
+      font-size:11px;
+      border-radius:6px;
+    }
+    #incident-overlay h1 {
+      font-size:13px;
+      margin-bottom:4px;
+      border-bottom:1px solid rgba(255,255,255,0.15);
+      padding-bottom:3px;
+    }
+    #incident-overlay .row {
+      display:flex;
+      justify-content:space-between;
+      margin-top:1px;
+    }
+    #incident-overlay .label { color:#ccc; }
+    #incident-overlay .value { font-weight:bold; }
+    #incident-overlay .green { color:#79ff79; }
+    #incident-overlay .red   { color:#ff5b5b; }
+    #incident-overlay .amber { color:#ffd56a; }
+
+    #fire-progress-bar {
+      margin-top:4px;
+      height:5px;
+      border-radius:3px;
+      background:rgba(255,255,255,0.1);
+      overflow:hidden;
+    }
+    #fire-progress-bar-inner {
+      height:100%;
+      width:0%;
+      background:linear-gradient(90deg,#ff6b6b,#ffa500);
+    }
+
+    /* SCBA HUD (default above minimap) */
+    #scba-hud {
+      position:fixed;
+      left:15px;
+      bottom:55px;
+      width:230px;
+      padding:6px 8px;
+      background:rgba(0,0,0,0.75);
+      color:#fff;
+      font-size:11px;
+      border-radius:6px;
+    }
+    #scba-hud h2 {
+      font-size:11px;
+      margin-bottom:3px;
+    }
+    #scba-bar {
+      height:8px;
+      border-radius:4px;
+      background:rgba(255,255,255,0.1);
+      overflow:hidden;
+    }
+    #scba-bar-inner {
+      height:100%;
+      width:0%;
+      background:linear-gradient(90deg,#ff4b4b,#ffb84b);
+    }
+    #scba-percent {
+      font-size:10px;
+      margin-top:2px;
+      text-align:right;
+    }
+
+    /* FIRE GUIDE (toggle with /guidefire) */
+    #guide-box {
+      position:fixed;
+      top:30px;
+      left:30px;
+      width:340px;
+      padding:8px 10px;
+      background:rgba(0,0,0,0.85);
+      color:#fff;
+      font-size:12px;
+      border-radius:6px;
+    }
+    #guide-title {
+      font-weight:bold;
+      margin-bottom:4px;
+      color:#6eb4ff;
+    }
+    #guide-steps {
+      list-style-type:none;
+    }
+    #guide-steps li {
+      margin-left:4px;
+      margin-bottom:2px;
+    }
+
+    /* Notifications (top-right toasts) */
+    #notifications {
+      position:fixed;
+      top:40px;
+      right:30px;
+      width:300px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      pointer-events:none;
+    }
+    .toast {
+      background:rgba(0,0,0,0.85);
+      padding:6px 8px;
+      color:#fff;
+      font-size:11px;
+      border-left:3px solid #58a6ff;
+      border-radius:4px;
+      animation:fadeIn 0.2s ease-out;
+    }
+    .toast.warning { border-color:#ffd966; }
+    .toast.error   { border-color:#ff4b4b; }
+    .toast.success { border-color:#5bff8a; }
+
+    @keyframes fadeIn {
+      from { opacity:0; transform:translateY(-4px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* Banners (center-top) */
+    .banner {
+      position:fixed;
+      top:80px;
+      left:50%;
+      transform:translateX(-50%);
+      padding:10px 20px;
+      border-radius:6px;
+      color:#fff;
+      background:rgba(0,0,0,0.9);
+      font-size:13px;
+      text-align:center;
+      min-width:320px;
+      box-shadow:0 0 12px rgba(0,0,0,0.7);
+      pointer-events:none;
+    }
+    #alarm-banner { border:2px solid #ffb84b; }
+    #pass-banner  { border:2px solid #ffd966; }
+    #mayday-banner{ border:2px solid #ff4b4b; }
+    #callout-banner{ border:2px solid #6eb4ff; top:50px; }
+
+    .banner-title { font-weight:bold; margin-bottom:3px; }
+    .banner-sub   { font-size:11px; opacity:0.85; }
+
+    /* PAR + Thermal modals */
+    #par-modal, #thermal-modal {
+      position:fixed;
+      top:0; left:0;
+      width:100%; height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(0,0,0,0.4);
+    }
+    .modal-content {
+      width:360px;
+      padding:15px 18px;
+      background:rgba(0,0,0,0.95);
+      color:#fff;
+      border-radius:8px;
+      box-shadow:0 0 16px rgba(0,0,0,0.8);
+      font-size:12px;
+    }
+    .modal-content h2 {
+      font-size:15px;
+      margin-bottom:6px;
+    }
+    .modal-content p { margin-bottom:8px; }
+    .modal-btn {
+      display:inline-block;
+      padding:6px 12px;
+      font-size:12px;
+      border-radius:4px;
+      border:none;
+      cursor:pointer;
+      margin-top:6px;
+    }
+    .btn-primary {
+      background:#5bff8a;
+      color:#000;
+    }
+
+    #thermal-bar {
+      margin-top:6px;
+      width:100%;
+      height:6px;
+      border-radius:3px;
+      background:rgba(255,255,255,0.1);
+      overflow:hidden;
+    }
+    #thermal-bar-inner {
+      width:0%;
+      height:100%;
+      background:linear-gradient(90deg,#5bff8a,#58a6ff);
+    }
+  </style>
+</head>
+<body>
+  <!-- Incident HUD -->
+  <div id="incident-overlay" class="hidden">
+    <h1>Incident</h1>
+    <div class="row"><span class="label">Incident</span><span id="inc-id" class="value">#0</span></div>
+    <div class="row"><span class="label">Division</span><span id="inc-division" class="value">Unassigned</span></div>
+    <div class="row"><span class="label">Role</span><span id="inc-role" class="value">FF</span></div>
+    <div class="row">
+      <span class="label">IDLH</span>
+      <span id="inc-idlh" class="value red">NO</span>
+    </div>
+    <div class="row">
+      <span class="label">PASS</span>
+      <span id="inc-pass" class="value green">OK</span>
+    </div>
+    <div class="row">
+      <span class="label">Air</span>
+      <span id="inc-air" class="value">0%</span>
+    </div>
+    <div class="row">
+      <span class="label">Fire</span>
+      <span id="inc-fire" class="value">0%</span>
+    </div>
+    <div id="fire-progress-bar"><div id="fire-progress-bar-inner"></div></div>
+  </div>
+
+  <!-- SCBA HUD -->
+  <div id="scba-hud" class="hidden">
+    <h2>SCBA AIR</h2>
+    <div id="scba-bar"><div id="scba-bar-inner"></div></div>
+    <div id="scba-percent">0%</div>
+  </div>
+
+  <!-- FIRE GUIDE -->
+  <div id="guide-box" class="hidden">
+    <div id="guide-title">FIRE GUIDE</div>
+    <ul id="guide-steps">
+      <li>/testfire car/wild/house to start an incident.</li>
+      <li>Use /scba or F6 before entering smoke.</li>
+      <li>Park a pumper or go to a hydrant (map blip).</li>
+      <li>/hose or F7 near source to connect the line.</li>
+      <li>Hold LMB to flow water, hold RMB to aim.</li>
+      <li>Watch FIRE% on HUD – 100% = fire out.</li>
+      <li>/overhaul or F8 to scan for hotspots.</li>
+    </ul>
+  </div>
+
+  <!-- Notifications -->
+  <div id="notifications"></div>
+
+  <!-- Banners -->
+  <div id="alarm-banner" class="banner hidden">
+    <div class="banner-title" id="alarm-title">FIRE ALARM</div>
+    <div class="banner-sub" id="alarm-text"></div>
+  </div>
+
+  <div id="pass-banner" class="banner hidden">
+    <div class="banner-title">PASS DEVICE ALERT</div>
+    <div class="banner-sub" id="pass-text"></div>
+  </div>
+
+  <div id="mayday-banner" class="banner hidden">
+    <div class="banner-title">MAYDAY</div>
+    <div class="banner-sub" id="mayday-text"></div>
+  </div>
+
+  <div id="callout-banner" class="banner hidden">
+    <div class="banner-title">FIRE CALLOUT</div>
+    <div class="banner-sub" id="callout-text"></div>
+  </div>
+
+  <!-- PAR modal -->
+  <div id="par-modal" class="hidden">
+    <div class="modal-content">
+      <h2>PAR CHECK</h2>
+      <p>Incident Command is requesting a Personnel Accountability Report.</p>
+      <p>Confirm that you and your crew are accounted for.</p>
+      <button id="par-confirm" class="modal-btn btn-primary">Confirm PAR</button>
+    </div>
+  </div>
+
+  <!-- Thermal / Overhaul modal -->
+  <div id="thermal-modal" class="hidden">
+    <div class="modal-content">
+      <h2>THERMAL SCAN</h2>
+      <p>Scanning for hotspots...</p>
+      <div id="thermal-bar"><div id="thermal-bar-inner"></div></div>
+    </div>
+  </div>
+
+  <audio id="alarm-audio">
+    <source src="alarm.ogg" type="audio/ogg">
+  </audio>
+
+  <script>
+    const incidentOverlay = document.getElementById('incident-overlay');
+    const incIdEl   = document.getElementById('inc-id');
+    const incDivEl  = document.getElementById('inc-division');
+    const incRoleEl = document.getElementById('inc-role');
+    const incIdlhEl = document.getElementById('inc-idlh');
+    const incPassEl = document.getElementById('inc-pass');
+    const incAirEl  = document.getElementById('inc-air');
+    const incFireEl = document.getElementById('inc-fire');
+    const fireBar   = document.getElementById('fire-progress-bar-inner');
+
+    const scbaHud      = document.getElementById('scba-hud');
+    const scbaBarInner = document.getElementById('scba-bar-inner');
+    const scbaPercent  = document.getElementById('scba-percent');
+
+    const notifications = document.getElementById('notifications');
+
+    const alarmBanner = document.getElementById('alarm-banner');
+    const alarmTitle  = document.getElementById('alarm-title');
+    const alarmText   = document.getElementById('alarm-text');
+    const alarmAudio  = document.getElementById('alarm-audio');
+
+    const passBanner  = document.getElementById('pass-banner');
+    const passText    = document.getElementById('pass-text');
+
+    const maydayBanner = document.getElementById('mayday-banner');
+    const maydayText   = document.getElementById('mayday-text');
+
+    const calloutBanner = document.getElementById('callout-banner');
+    const calloutText   = document.getElementById('callout-text');
+
+    const parModal     = document.getElementById('par-modal');
+    const parBtn       = document.getElementById('par-confirm');
+
+    const thermalModal = document.getElementById('thermal-modal');
+    const thermalBar   = document.getElementById('thermal-bar-inner');
+    let thermalTargetId = null;
+    let thermalTimer    = null;
+
+    let hudPosIndex = 1;
+
+    function nui(event, data) {
+      // MUST match your resource folder name
+      fetch('https://az-fire/' + event, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify(data || {})
+      });
+    }
+
+    function setHudPosition(index) {
+      hudPosIndex = index;
+      const inc = incidentOverlay.style;
+      const scb = scbaHud.style;
+
+      inc.top = inc.bottom = inc.left = inc.right = '';
+      scb.top = scb.bottom = scb.left = scb.right = '';
+
+      if (index === 2) {          // bottom-right
+        inc.bottom = '140px'; inc.right = '15px';
+        scb.bottom = '55px';  scb.right = '15px';
+      } else if (index === 3) {   // top-left
+        inc.top = '100px';   inc.left = '15px';
+        scb.top = '20px';    scb.left = '15px';
+      } else if (index === 4) {   // top-right
+        inc.top = '100px';   inc.right = '15px';
+        scb.top = '20px';    scb.right = '15px';
+      } else {                   // bottom-left default
+        inc.bottom = '140px'; inc.left = '15px';
+        scb.bottom = '55px';  scb.left = '15px';
+      }
+    }
+
+    function showIncidentOverlay(payload) {
+      const a = payload.assignment || {};
+      const idlh = !!payload.idlh;
+      const passStatus = payload.passStatus || {};
+      const scba = payload.scba || {};
+      const progress = payload.fireProgress || {};
+
+      const incidentId = (a.incidentId && a.incidentId !== 0) ? ('#' + a.incidentId) : '#0';
+      incIdEl.textContent   = incidentId;
+      incDivEl.textContent  = a.division || 'Unassigned';
+      incRoleEl.textContent = a.role || 'FF';
+
+      if (idlh) {
+        incIdlhEl.textContent = 'YES';
+        incIdlhEl.classList.remove('green');
+        incIdlhEl.classList.add('red');
+      } else {
+        incIdlhEl.textContent = 'NO';
+        incIdlhEl.classList.remove('red');
+        incIdlhEl.classList.add('green');
+      }
+
+      if (passStatus.full) {
+        incPassEl.textContent = 'ALARM';
+        incPassEl.className = 'value red';
+      } else if (passStatus.pre) {
+        incPassEl.textContent = 'PRE';
+        incPassEl.className = 'value amber';
+      } else {
+        incPassEl.textContent = 'OK';
+        incPassEl.className = 'value green';
+      }
+
+      if (scba.max && scba.max > 0) {
+        const pctAir = Math.max(0, Math.min(100, Math.round((scba.air || 0) / scba.max * 100)));
+        incAirEl.textContent = pctAir + '%';
+      } else {
+        incAirEl.textContent = '0%';
+      }
+
+      const firePct = Math.max(0, Math.min(100, Math.round(progress.pct || 0)));
+      incFireEl.textContent = firePct + '%';
+      fireBar.style.width = firePct + '%';
+
+      incidentOverlay.classList.remove('hidden');
+    }
+
+    function hideIncidentOverlay() {
+      incidentOverlay.classList.add('hidden');
+    }
+
+    function updateScbaAir(value, max) {
+      if (!max || max <= 0) {
+        scbaHud.classList.add('hidden');
+        return;
+      }
+      const pct = Math.max(0, Math.min(100, Math.round((value || 0) / max * 100)));
+      scbaHud.classList.remove('hidden');
+      scbaBarInner.style.width = pct + '%';
+      scbaPercent.textContent = pct + '%';
+    }
+
+    function showToast(kind, text) {
+      const div = document.createElement('div');
+      div.className = 'toast ' + (kind || 'info');
+      div.textContent = text || '';
+      notifications.appendChild(div);
+      setTimeout(() => {
+        if (div.parentNode) div.parentNode.removeChild(div);
+      }, 4000);
+    }
+
+    function showBanner(el) {
+      el.classList.remove('hidden');
+      setTimeout(() => {
+        el.classList.add('hidden');
+      }, 8000);
+    }
+
+    function handleAlarm(data) {
+      alarmTitle.textContent = 'ALARM LEVEL ' + (data.level || '?');
+      alarmText.textContent  = data.message || '';
+      showBanner(alarmBanner);
+    }
+
+    function playAlarmSound() {
+      if (!alarmAudio) return;
+      alarmAudio.currentTime = 0;
+      alarmAudio.volume = 0.9;
+      alarmAudio.play().catch(() => {});
+    }
+
+    // Callout banner (manual show/hide, no auto-timeout)
+    function showCallout(text) {
+      calloutText.textContent = text || '';
+      calloutBanner.classList.remove('hidden');
+    }
+    function hideCallout() {
+      calloutBanner.classList.add('hidden');
+    }
+
+    // PAR button
+    parBtn.addEventListener('click', function() {
+      parModal.classList.add('hidden');
+      nui('par_confirm', {});
+    });
+
+    // Thermal scan sequence
+    function startThermalScan(targetId) {
+      thermalTargetId = targetId;
+      thermalModal.classList.remove('hidden');
+      thermalBar.style.width = '0%';
+      if (thermalTimer) {
+        clearInterval(thermalTimer);
+      }
+      let pct = 0;
+      thermalTimer = setInterval(() => {
+        pct += 5;
+        if (pct > 100) pct = 100;
+        thermalBar.style.width = pct + '%';
+        if (pct >= 100) {
+          clearInterval(thermalTimer);
+          thermalTimer = null;
+          setTimeout(() => {
+            thermalModal.classList.add('hidden');
+            nui('overhaul_done', { targetId: thermalTargetId });
+          }, 300);
+        }
+      }, 200);
+    }
+
+    // ESC to close modals (without sending PAR confirm)
+    window.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        if (!parModal.classList.contains('hidden')) {
+          parModal.classList.add('hidden');
+          nui('par_cancel', {});
+        }
+        if (!thermalModal.classList.contains('hidden')) {
+          thermalModal.classList.add('hidden');
+          if (thermalTimer) {
+            clearInterval(thermalTimer);
+            thermalTimer = null;
+          }
+          nui('overhaul_cancel', { targetId: thermalTargetId });
+        }
+      }
+    });
+
+    // Message handler from client.lua
+    window.addEventListener('message', function (event) {
+      const data = event.data || {};
+      const act  = data.action;
+
+      switch (act) {
+        case 'incident_update':
+          showIncidentOverlay(data);
+          break;
+        case 'incident_hide':
+          hideIncidentOverlay();
+          break;
+        case 'scba_air':
+          updateScbaAir(data.value || 0, data.max || 0);
+          break;
+        case 'scba_low':
+          showToast('warning', 'SCBA low air!');
+          break;
+        case 'notify':
+          showToast(data.kind || data.type || 'info', data.text || '');
+          break;
+        case 'alarm':
+          handleAlarm(data);
+          break;
+        case 'alarm_sound':
+          playAlarmSound();
+          break;
+        case 'incident_complete':
+          showToast('success', data.msg || 'Incident complete.');
+          break;
+        case 'pass_prealert':
+          showToast('warning', 'PASS pre-alert – firefighter not moving.');
+          break;
+        case 'pass_full':
+          showToast('error', 'PASS FULL ALARM – FIREFIGHTER DOWN!');
+          break;
+        case 'pass_reset':
+          passBanner.classList.add('hidden');
+          break;
+        case 'pass_alert': {
+          const p = data.payload || {};
+          const msg = (p.name || 'Firefighter') +
+                      ' down – ' + (p.division || 'Unknown') +
+                      ' (check map / RIT).';
+          passText.textContent = msg;
+          showBanner(passBanner);
+          break;
+        }
+        case 'mayday_alert': {
+          const p = data.payload || {};
+          const airRaw = Number(p.air || 0);
+          const air = Math.max(0, Math.min(100, Math.round(airRaw)));
+          const msg = (p.name || 'Firefighter') + ' MAYDAY – ' +
+                      (p.division || 'Unknown') +
+                      ' | Air: ' + air + '%';
+          maydayText.textContent = msg;
+          showBanner(maydayBanner);
+          break;
+        }
+        case 'par_request':
+          parModal.classList.remove('hidden');
+          break;
+        case 'thermal_scan':
+          startThermalScan(data.targetId);
+          break;
+        case 'guide': {
+          const box = document.getElementById('guide-box');
+          if (data.show) box.classList.remove('hidden');
+          else box.classList.add('hidden');
+          break;
+        }
+        case 'hud_position':
+          setHudPosition(data.index || 1);
+          break;
+        case 'callout':
+          if (data.show) showCallout(data.text || '');
+          else hideCallout();
+          break;
+      }
+    });
+
+    // Initialise
+    parModal.classList.add('hidden');
+    thermalModal.classList.add('hidden');
+    setHudPosition(1);
+  </script>
+</body>
+</html>
